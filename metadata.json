@@ -1,0 +1,6 @@
+{
+  "name": "SAM 3 Masking Backend Dashboard",
+  "description": "NVIDIA L4 GPU-optimized Segment Anything 2/3 video tracking and boundary-smoothed masking API engine.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

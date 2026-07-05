@@ -1,0 +1,34 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: masking
+  annotations:
+    run.googleapis.com/ingress: all
+spec:
+  template:
+    metadata:
+      annotations:
+        # Request NVIDIA L4 GPU accelerator
+        run.googleapis.com/gpu-type: nvidia-l4
+        # Scale to zero when inactive to reduce idle GPU cost to $0
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "1"
+        # Disable CPU throttling to maintain optimal CUDA/PyTorch performance
+        run.googleapis.com/cpu-throttling: "false"
+    spec:
+      # Restrict concurrency to 1 request per container to prevent parallel VRAM allocation overlap
+      containerConcurrency: 1
+      containers:
+      - image: gcr.io/placeholder/sam3-masking-backend:latest
+        resources:
+          limits:
+            cpu: "4"
+            memory: "16Gi"
+            google.com/gpu: "1"
+        ports:
+        - containerPort: 3000
+        env:
+        - name: TORCH_CUDA_ARCH_LIST
+          value: "8.9" # Optimized compilation target for NVIDIA L4 (Ada Lovelace architecture)
+        - name: FORCE_CUDA
+          value: "1"
