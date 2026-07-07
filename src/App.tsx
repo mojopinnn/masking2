@@ -238,6 +238,10 @@ export default function App() {
     addLog(`[UPLOAD] Received video file: ${file.name} (${(file.size / (1024 * 1024)).toFixed(2)} MB)`);
     addLog(`[FastAPI] Sending request to /api/sam3/session/create...`);
 
+    // Create an instant local blob URL for the video so it is 100% playable and visible without CORS/GCS issues
+    const localBlobUrl = URL.createObjectURL(file);
+    setVideoStreamUrl(localBlobUrl);
+
     try {
       const formData = new FormData();
       formData.append("video", file);
@@ -274,7 +278,7 @@ export default function App() {
 
       if (absoluteStreamUrl) {
         addLog(`[RENDER] Direct Stream Absolute URL resolved: ${absoluteStreamUrl}`);
-        setVideoStreamUrl(absoluteStreamUrl);
+        // We can keep using the localBlobUrl for perfect lag-free playback, or fallback if needed
         setDriveWebViewUrl(data.gcs_url || data.drive_web_view_link);
         setDriveFileId(data.gcs_file_name || data.drive_file_id);
       }
@@ -301,7 +305,7 @@ export default function App() {
       addLog(`[FastAPI/DRIVE] Live backend connection not detected or Drive error (${err.message}). Falling back to high-fidelity simulation.`);
       addLog(`[SIMULATION] Decoded mock metadata for: ${file.name} (30 FPS, 45 frames)`);
       
-      setVideoStreamUrl(null);
+      // Keep the local blob URL active so the uploaded video is fully visible and playable
       setDriveWebViewUrl(null);
       setDriveFileId(null);
       setRealSessionId(null);
@@ -753,7 +757,6 @@ spec:
                 playsInline
                 muted
                 loop
-                crossOrigin="anonymous"
               />
             )}
 

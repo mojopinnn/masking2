@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "BACKEND_PORT=8000 python3 main.py & vite --port=3000 --host=0.0.0.0",
+    "dev": "BACKEND_PORT=8001 python3 main.py & vite --port=3000 --host=0.0.0.0",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",

@@ -18,6 +18,7 @@ try:
     from google.oauth2 import service_account
     from googleapiclient.discovery import build
     from googleapiclient.http import MediaFileUpload
+    from googleapiclient.errors import HttpError
     GOOGLE_API_AVAILABLE = True
 except ImportError:
     GOOGLE_API_AVAILABLE = False
@@ -106,11 +107,45 @@ class GoogleDriveService:
             media = MediaFileUpload(filepath, resumable=True)
             logger.info(f"Uploading '{filename}' to Google Drive...")
             
-            uploaded_file = self.service.files().create(
-                body=file_metadata,
-                media_body=media,
-                fields="id, webViewLink, webContentLink"
-            ).execute()
+            try:
+                uploaded_file = self.service.files().create(
+                    body=file_metadata,
+                    media_body=media,
+                    fields="id, webViewLink, webContentLink"
+                ).execute()
+            except HttpError as he:
+                # If we specified a folder_id and got a 404, the folder likely doesn't exist or isn't accessible
+                # to this service account. Let's retry uploading without a parent directory.
+                if he.resp.status == 404 and self.folder_id:
+                    logger.warning(
+                        f"Google Drive parent folder '{self.folder_id}' was not found or is inaccessible (HTTP 404). "
+                        "Retrying upload directly to the Google Drive root folder..."
+                    )
+                    file_metadata.pop("parents", None)
+                    media = MediaFileUpload(filepath, resumable=True)
+                    uploaded_file = self.service.files().create(
+                        body=file_metadata,
+                        media_body=media,
+                        fields="id, webViewLink, webContentLink"
+                    ).execute()
+                else:
+                    raise he
+            except Exception as outer_err:
+                # Catch general exceptions like Google Drive API errors that don't raise HttpError but have 404 in details
+                if "404" in str(outer_err) and self.folder_id:
+                    logger.warning(
+                        f"Encountered potential 404 error with parent folder '{self.folder_id}': {outer_err}. "
+                        "Retrying upload directly to the Google Drive root folder..."
+                    )
+                    file_metadata.pop("parents", None)
+                    media = MediaFileUpload(filepath, resumable=True)
+                    uploaded_file = self.service.files().create(
+                        body=file_metadata,
+                        media_body=media,
+                        fields="id, webViewLink, webContentLink"
+                    ).execute()
+                else:
+                    raise outer_err
             
             file_id = uploaded_file.get("id")
             logger.info(f"File uploaded successfully to Google Drive. File ID: {file_id}")
@@ -163,8 +198,19 @@ class GoogleCloudStorageService:
             return
 
         try:
-            self.client = storage.Client()
-            logger.info(f"Google Cloud Storage client initialized successfully. Bucket: {self.bucket_name}")
+            creds_json = os.getenv("GOOGLE_DRIVE_CREDENTIALS")
+            if creds_json:
+                try:
+                    creds_info = json.loads(creds_json)
+                    creds = service_account.Credentials.from_service_account_info(creds_info)
+                    self.client = storage.Client(credentials=creds, project=creds_info.get("project_id"))
+                    logger.info(f"Google Cloud Storage client initialized successfully via service account. Bucket: {self.bucket_name}")
+                except Exception as cre_err:
+                    logger.warning(f"Failed to load GCS client via service account info: {cre_err}. Falling back to default Client.")
+                    self.client = storage.Client()
+            else:
+                self.client = storage.Client()
+                logger.info(f"Google Cloud Storage client initialized successfully. Bucket: {self.bucket_name}")
         except Exception as e:
             logger.warning(f"Failed to initialize Google Cloud Storage client: {e}. Falling back to simulated/local links.")
 
